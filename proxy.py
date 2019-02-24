@@ -476,7 +476,11 @@ class Proxy(threading.Thread):
                 host, port = self.request.url.hostname, self.request.url.port if self.request.url.port else 80
             else:
                 raise Exception('Invalid request\n%s' % self.request.raw)
-
+			
+			
+			if whitelisthost and not host.endswith(whitelisthost):
+				ProxyConnectionFailed(host, port, "Host not allowed")
+            
             self.server = Server(host, port)
             try:
                 logger.debug('connecting to server %s:%s' % (host, port))
@@ -496,7 +500,10 @@ class Proxy(threading.Thread):
             else:
                 self.server.queue(self.request.build(
                     del_headers=[b'proxy-authorization', b'proxy-connection', b'connection', b'keep-alive'],
-                    add_headers=[(b'Via', b'1.1 proxy.py v%s' % version), (b'Connection', b'Close')]
+                    add_headers=[
+                    	(b'Via', b'1.1 proxy.py v%s' % version),
+                    	(b'Connection', b'Close'),
+                	]
                 ))
 
     def _process_response(self, data):
@@ -704,6 +711,9 @@ def main():
                                                                   'Maximum number of files (TCP connections) '
                                                                   'that proxy.py can open concurrently.')
     parser.add_argument('--log-level', default='INFO', help='DEBUG, INFO (default), WARNING, ERROR, CRITICAL')
+    
+    parser.add_argument('--whitelisthost', default=None, help='Only allow to connect to this host')
+    
     args = parser.parse_args()
 
     logging.basicConfig(level=getattr(logging, args.log_level),
@@ -715,7 +725,9 @@ def main():
         auth_code = None
         if args.basic_auth:
             auth_code = b'Basic %s' % base64.b64encode(bytes_(args.basic_auth))
-
+		
+		whitelisthost = args.whitelisthost
+		
         proxy = HTTP(hostname=args.hostname,
                      port=int(args.port),
                      backlog=int(args.backlog),
